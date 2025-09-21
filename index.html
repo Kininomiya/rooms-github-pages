@@ -14,6 +14,8 @@
       #unity-build-title {
         display: none !important;
       }
+      /* Optional: hide footer entirely if it has fixed height/padding in your CSS */
+      #unity-footer { display: none !important; }
     </style>
   </head>
   <body>
@@ -27,7 +29,10 @@
       </div>
       <div id="unity-warning"></div>
       <div id="unity-footer">
-        <!-- Footer elements removed/hidden -->
+        <!-- Removed default footer elements -->
+        <!-- <div id="unity-webgl-logo"></div> -->
+        <!-- <div id="unity-fullscreen-button"></div> -->
+        <!-- <div id="unity-build-title">Backrooms</div> -->
       </div>
     </div>
 
@@ -66,7 +71,7 @@
         companyName: "IEP",
         productName: "Backrooms",
         productVersion: "1.7.1",
-        showBanner: unityShowBanner,
+        showBanner: unityShowBanner
       };
 
       if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
@@ -76,6 +81,8 @@
         document.getElementsByTagName('head')[0].appendChild(meta);
         container.className = "unity-mobile";
         canvas.className = "unity-mobile";
+        // Optional: lower DPR for perf
+        // config.devicePixelRatio = 1;
       } else {
         canvas.style.width = "960px";
         canvas.style.height = "600px";
@@ -84,46 +91,63 @@
       canvas.style.background = "url('" + buildUrl + "/Backrooms v1.7.1 - WebGL.jpg') center / cover";
       loadingBar.style.display = "block";
 
-      /* --- Block GameJolt connections --- */
-      const _origFetch = window.fetch.bind(window);
-      window.fetch = (req, init) => {
-        const url = typeof req === 'string' ? req : req.url;
-        if (url.includes('gamejolt.com')) {
-          console.warn('Blocked GameJolt request:', url);
-          return Promise.resolve(
-            new Response('{}', {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            })
-          );
-        }
-        return _origFetch(req, init);
-      };
-
-      const _OrigWS = window.WebSocket;
-      window.WebSocket = function(url, protocols) {
-        if (url.includes('gamejolt.com')) {
-          console.warn('Blocked GameJolt WebSocket:', url);
-          return {
-            send: () => {},
-            close: () => {},
-            onopen: null,
-            onmessage: null,
-            onclose: null,
+      /* Block GameJolt connections (fetch + WebSocket) */
+      (function() {
+        const _origFetch = window.fetch ? window.fetch.bind(window) : null;
+        if (_origFetch) {
+          window.fetch = (req, init) => {
+            try {
+              const url = typeof req === 'string' ? req : req.url;
+              if (url && url.includes('gamejolt.com')) {
+                console.warn('Blocked GameJolt request:', url);
+                return Promise.resolve(new Response('{}', {
+                  status: 200,
+                  headers: { 'Content-Type': 'application/json' }
+                }));
+              }
+            } catch (e) {}
+            return _origFetch(req, init);
           };
         }
-        return new _OrigWS(url, protocols);
-      };
-      /* --- End GameJolt block --- */
+
+        const _OrigWS = window.WebSocket;
+        if (_OrigWS) {
+          window.WebSocket = function(url, protocols) {
+            try {
+              if (url && url.toString().includes('gamejolt.com')) {
+                console.warn('Blocked GameJolt WebSocket:', url);
+                // Minimal fake socket to avoid null refs
+                const dummy = { readyState: 3, // CLOSED
+                  send: () => {},
+                  close: () => {},
+                  addEventListener: () => {},
+                  removeEventListener: () => {},
+                  dispatchEvent: () => false,
+                  onopen: null, onmessage: null, onerror: null, onclose: null
+                };
+                // Fire a close asynchronously to mimic a closed socket
+                setTimeout(() => dummy.onclose && dummy.onclose({ code: 1006 }), 0);
+                return dummy;
+              }
+            } catch (e) {}
+            return new _OrigWS(url, protocols);
+          };
+          // Preserve constants
+          window.WebSocket.CONNECTING = _OrigWS.CONNECTING;
+          window.WebSocket.OPEN = _OrigWS.OPEN;
+          window.WebSocket.CLOSING = _OrigWS.CLOSING;
+          window.WebSocket.CLOSED = _OrigWS.CLOSED;
+        }
+      })();
 
       var script = document.createElement("script");
       script.src = loaderUrl;
       script.onload = () => {
         createUnityInstance(canvas, config, (progress) => {
-          progressBarFull.style.width = 100 * progress + "%";
+          progressBarFull.style.width = (100 * progress) + "%";
         }).then((unityInstance) => {
           loadingBar.style.display = "none";
-          // fullscreenButton removed
+          // Fullscreen button intentionally not wired
         }).catch((message) => {
           alert(message);
         });
@@ -132,3 +156,4 @@
     </script>
   </body>
 </html>
+
