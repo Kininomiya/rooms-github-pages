@@ -6,34 +6,70 @@
     <title>Backrooms</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
+
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes">
+
     <style>
+      /* Reset & fullscreen layout */
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+      #unity-container {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+      }
+      #unity-canvas {
+        width: 100vw !important;
+        height: 100vh !important;
+        display: block;
+        outline: none;
+        background: #000; /* Remove or replace splash if desired */
+      }
+      /* Center the loading bar over the canvas */
+      #unity-loading-bar {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 10;
+      }
       /* Hide Unity branding/footer elements */
       #unity-logo,
       #unity-webgl-logo,
       #unity-fullscreen-button,
-      #unity-build-title {
+      #unity-build-title,
+      #unity-footer {
         display: none !important;
       }
-      /* Optional: hide footer entirely if it has fixed height/padding in your CSS */
-      #unity-footer { display: none !important; }
+      /* Warn banner position (if any warnings occur) */
+      #unity-warning {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        z-index: 20;
+      }
     </style>
   </head>
   <body>
     <div id="unity-container" class="unity-desktop">
-      <canvas id="unity-canvas" width="960" height="600" tabindex="-1"></canvas>
+      <canvas id="unity-canvas" tabindex="-1"></canvas>
+
       <div id="unity-loading-bar">
         <div id="unity-logo"></div>
         <div id="unity-progress-bar-empty">
           <div id="unity-progress-bar-full"></div>
         </div>
       </div>
+
       <div id="unity-warning"></div>
-      <div id="unity-footer">
-        <!-- Removed default footer elements -->
-        <!-- <div id="unity-webgl-logo"></div> -->
-        <!-- <div id="unity-fullscreen-button"></div> -->
-        <!-- <div id="unity-build-title">Backrooms</div> -->
-      </div>
+      <div id="unity-footer"></div>
     </div>
 
     <script>
@@ -72,23 +108,21 @@
         productName: "Backrooms",
         productVersion: "1.7.1",
         showBanner: unityShowBanner
+        // Note: matchWebGLToCanvasSize defaults to true, which is what we want
       };
 
+      // Mobile: use the same fullscreen layout, with optional DPR reduction for perf.
       if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        var meta = document.createElement('meta');
-        meta.name = 'viewport';
-        meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
-        document.getElementsByTagName('head')[0].appendChild(meta);
         container.className = "unity-mobile";
         canvas.className = "unity-mobile";
-        // Optional: lower DPR for perf
+        // Optional performance tweak:
         // config.devicePixelRatio = 1;
-      } else {
-        canvas.style.width = "960px";
-        canvas.style.height = "600px";
       }
 
-      canvas.style.background = "url('" + buildUrl + "/Backrooms v1.7.1 - WebGL.jpg') center / cover";
+      // Optional: if you still want a background image behind the loading,
+      // uncomment and point to your own image:
+      // canvas.style.background = "url('" + buildUrl + "/Backrooms v1.7.1 - WebGL.jpg') center / cover no-repeat";
+
       loadingBar.style.display = "block";
 
       /* Block GameJolt connections (fetch + WebSocket) */
@@ -116,8 +150,8 @@
             try {
               if (url && url.toString().includes('gamejolt.com')) {
                 console.warn('Blocked GameJolt WebSocket:', url);
-                // Minimal fake socket to avoid null refs
-                const dummy = { readyState: 3, // CLOSED
+                const dummy = {
+                  readyState: 3, // CLOSED
                   send: () => {},
                   close: () => {},
                   addEventListener: () => {},
@@ -125,14 +159,12 @@
                   dispatchEvent: () => false,
                   onopen: null, onmessage: null, onerror: null, onclose: null
                 };
-                // Fire a close asynchronously to mimic a closed socket
                 setTimeout(() => dummy.onclose && dummy.onclose({ code: 1006 }), 0);
                 return dummy;
               }
             } catch (e) {}
             return new _OrigWS(url, protocols);
           };
-          // Preserve constants
           window.WebSocket.CONNECTING = _OrigWS.CONNECTING;
           window.WebSocket.OPEN = _OrigWS.OPEN;
           window.WebSocket.CLOSING = _OrigWS.CLOSING;
@@ -140,6 +172,7 @@
         }
       })();
 
+      // Create and load the Unity instance
       var script = document.createElement("script");
       script.src = loaderUrl;
       script.onload = () => {
@@ -147,13 +180,24 @@
           progressBarFull.style.width = (100 * progress) + "%";
         }).then((unityInstance) => {
           loadingBar.style.display = "none";
-          // Fullscreen button intentionally not wired
+          // No fullscreen button; canvas is already filling the window.
+          // If you want true browser fullscreen on click, you can call:
+          // document.documentElement.requestFullscreen().catch(()=>{});
         }).catch((message) => {
           alert(message);
         });
       };
       document.body.appendChild(script);
+
+      // Keep canvas perfectly synced to viewport on resize/orientation changes
+      function resizeCanvasToViewport() {
+        // With matchWebGLToCanvasSize true, Unity tracks client size.
+        canvas.style.width = "100vw";
+        canvas.style.height = "100vh";
+      }
+      window.addEventListener('resize', resizeCanvasToViewport);
+      window.addEventListener('orientationchange', resizeCanvasToViewport);
+      resizeCanvasToViewport();
     </script>
   </body>
 </html>
-
